@@ -2,7 +2,6 @@ import redis
 import time
 import os
 import signal
-import sys
 
 
 r = redis.Redis(
@@ -10,13 +9,14 @@ r = redis.Redis(
     port=int(os.getenv("REDIS_PORT", 6379))
 )
 
-
 running = True
+
 
 def handle_shutdown(signum, frame):
     global running
     print("Shutdown signal received, finishing current job...")
     running = False
+
 
 signal.signal(signal.SIGTERM, handle_shutdown)
 signal.signal(signal.SIGINT, handle_shutdown)
