@@ -184,6 +184,10 @@ jobs:
     name: Integration Test
     runs-on: ubuntu-latest
     needs: security-scan
+    env:
+      REDIS_HOST: ${{ secrets.REDIS_HOST }}
+      REDIS_PORT: ${{ secrets.REDIS_PORT }}
+      API_URL: ${{ secrets.API_URL }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -227,6 +231,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: integration-test
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    env:
+      REDIS_HOST: ${{ secrets.REDIS_HOST }}
+      REDIS_PORT: ${{ secrets.REDIS_PORT }}
+      API_URL: ${{ secrets.API_URL }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
