@@ -231,38 +231,81 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy to server
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            cd /home/hngdevops/hng14-stage2-devops
+      - name: Start initial stack
+        run: docker compose up -d --wait
 
-            git pull origin main
+      - name: Build new images
+        run: docker compose build
 
-            docker compose build
+      - name: Get internal network name
+        run: echo "NETWORK=$(docker network ls --filter name=internal --format '{{.Name}}' | head -1)" >> $GITHUB_ENV
 
-            # Rolling update for API
-            docker compose up -d --no-deps --build api
+      - name: Rolling update - API
+        run: |
+          docker run -d --name api_new \
+            --network "$NETWORK" \
+            -e REDIS_HOST=redis \
+            -e REDIS_PORT=6379 \
+            api:latest
 
-            # Wait for API health check - max 60 seconds
-            echo "Waiting for API health check..."
-            for i in $(seq 1 12); do
-              STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health)
-              if [ "$STATUS" = "200" ]; then
-                echo "API health check passed"
-                break
-              fi
-              if [ $i -eq 12 ]; then
-                echo "Health check failed after 60s - aborting deployment"
-                exit 1
-              fi
-              sleep 5
-            done
+          echo "Waiting for new API to become healthy..."
+          HEALTHY=false
+          for i in $(seq 1 12); do
+            if docker exec api_new python -c \
+              "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" \
+              > /dev/null 2>&1; then
+              HEALTHY=true
+              break
+            fi
+            echo "Attempt $i/12..."
+            sleep 5
+          done
 
-            # Bring up remaining services
-            docker compose up -d --no-deps --build worker frontend
+          if [ "$HEALTHY" = "false" ]; then
+            echo "New API failed health check after 60s - old container stays running"
+            docker rm -f api_new
+            exit 1
+          fi
 
-            echo "Deployment complete"
+          docker rm -f api_new
+          docker compose up -d --no-deps api
+          echo "API deployed successfully"
+
+      - name: Rolling update - Worker
+        run: |
+          docker compose up -d --no-deps worker
+          echo "Worker deployed"
+
+      - name: Rolling update - Frontend
+        run: |
+          docker run -d --name frontend_new \
+            --network "$NETWORK" \
+            -e API_URL=http://api:8000 \
+            frontend:latest
+
+          echo "Waiting for new Frontend to become healthy..."
+          HEALTHY=false
+          for i in $(seq 1 12); do
+            if docker exec frontend_new node -e \
+              "require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))" \
+              > /dev/null 2>&1; then
+              HEALTHY=true
+              break
+            fi
+            echo "Attempt $i/12..."
+            sleep 5
+          done
+
+          if [ "$HEALTHY" = "false" ]; then
+            echo "New Frontend failed health check after 60s - old container stays running"
+            docker rm -f frontend_new
+            exit 1
+          fi
+
+          docker rm -f frontend_new
+          docker compose up -d --no-deps frontend
+          echo "Deployment complete"
+
+      - name: Tear down
+        if: always()
+        run: docker compose down

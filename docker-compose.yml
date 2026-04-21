@@ -20,6 +20,7 @@ services:
 
   api:
     build: ./api
+    image: api:latest
     container_name: api
     networks:
       - internal
@@ -43,6 +44,7 @@ services:
 
   worker:
     build: ./worker
+    image: worker:latest
     container_name: worker
     networks:
       - internal
@@ -61,6 +63,7 @@ services:
 
   frontend:
     build: ./frontend
+    image: frontend:latest
     container_name: frontend
     networks:
       - internal
