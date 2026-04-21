@@ -1,5 +1,5 @@
 # Stage 1 - Builder
-FROM node:18-slim AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -10,10 +10,10 @@ COPY package*.json .
 RUN npm ci --only=production
 
 # Stage 2 - Final image
-FROM node:18-slim
+FROM node:20-alpine
 
 # Create non-root user
-RUN useradd -m appuser
+RUN adduser -D appuser
 
 WORKDIR /app
 
