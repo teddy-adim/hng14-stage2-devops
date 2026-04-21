@@ -305,7 +305,3 @@ jobs:
           docker rm -f frontend_new
           docker compose up -d --no-deps frontend
           echo "Deployment complete"
-
-      - name: Tear down
-        if: always()
-        run: docker compose down
